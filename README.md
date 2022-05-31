@@ -1,1 +1,4 @@
-# human_motion_analysis
+# Human Motion Analysis
+
+ongoing, see notebooks for exploratory analysis and initial tests of models
+ 
