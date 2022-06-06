@@ -7,3 +7,5 @@
 /data/**.gif
 /data/**.pkl
 /data
+/models
+/models/**.h5
