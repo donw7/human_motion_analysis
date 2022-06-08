@@ -106,9 +106,14 @@ model.save(os.path.join(OUT_DIR, 'model.h5'))
 # with open(os.path.join(OUT_DIR, 'params.pkl'), 'wb') as f:
 #   pkl.dump(args, f)
 
+# save history
+with open(os.path.join(OUT_DIR, 'history.dl'), 'wb') as f:
+  dl.dump(history.history, f)
+
 # save all params dill
 with open(os.path.join(OUT_DIR, 'params.pkl'), 'wb') as f:
   dl.dump(args, f)
+
 
 # optional save data (default=False)
 if args.save:
