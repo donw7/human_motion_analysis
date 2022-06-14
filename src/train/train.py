@@ -102,10 +102,6 @@ if not os.path.exists(args.outdir):
 # save model as h5
 model.save(os.path.join(OUT_DIR, 'model.h5'))
 
-# # save all params
-# with open(os.path.join(OUT_DIR, 'params.pkl'), 'wb') as f:
-#   pkl.dump(args, f)
-
 # save history
 with open(os.path.join(OUT_DIR, 'history.dl'), 'wb') as f:
   dl.dump(history.history, f)
