@@ -6,6 +6,7 @@ import base64
 import tensorflow as tf
 import tensorflow_hub as hub
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import yaml
@@ -78,16 +79,16 @@ def movenet(input_image):
 
 st.set_page_config(layout="wide")
 
-st.title("Physiotherapy Analytics Dashboard")
+st.title("Physiotherapy Analytics Demo")
 
 st.sidebar.header("Context")
-context_name = st.sidebar.selectbox("Choose a context", ["demo", "participant", "clinician"])
+context_name = st.sidebar.selectbox("Choose a context", ["participant", "clinician"])
 
 if context_name == "participant":
   with st.expander("Help"):
     st.markdown(f'''
           1. Choose a context in left sidebar
-          2. An example demo video from youtube is provided
+          2. An example demo video is provided
           3. Select analysis
           4. Click `Run` to start processing and analysis
           5. View analysis
@@ -144,13 +145,18 @@ if context_name == "participant":
     data_url_processed = base64.b64encode(contents).decode("utf-8")
     file_processed.close()
 
+    with open('out_keypoints.pkl', 'wb') as file:
+      pkl.dump(out_keypoints, file)
+
+    with open('out_edges.pkl', 'wb') as file:
+      pkl.dump(out_edges, file)
+
     st.markdown(
         f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
         unsafe_allow_html=True,
     )
   else:
     pass
-
 
 
 if context_name == "todo: upload":
@@ -187,6 +193,7 @@ if context_name == "todo: upload":
   else:
       st.write("Enter data above")
 
+
 if context_name == "clinician":
   st.write("todo")
   with st.expander("Help"):
@@ -197,3 +204,20 @@ if context_name == "clinician":
           4. Click `Run` to start processing and analysis
           5. View analysis
           ''')
+
+  with open('out_keypoints.pkl', 'rb') as file:
+    out_keypoints = pkl.load(file)
+
+  with open('out_edges.pkl', 'rb') as file:
+    out_edges = pkl.load(file)
+
+  out_edges = out_edges.reshape(-1, 72).astype('float32')
+
+  feature_idx = st.multiselect(
+    "Select features to plot",
+    [0, 1, 2, 3])
+  # feature_idx = st.selectbox("Column", list(range(out_edges.shape[1])))
+
+  fig, ax = plt.subplots()
+  ax.plot(out_edges[:,feature_idx])
+  st.pyplot(fig)
