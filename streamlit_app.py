@@ -139,7 +139,7 @@ if context_name == "participant":
     iomod.convert_to_gif(output2, fgifpath, fps=10)
 
 
-    """### processed"""
+    """### processed - body keypoints detected; anomalous velocities of motion highlighted in red"""
     file_processed = open(fgifpath, "rb")
     contents = file_processed.read()
     data_url_processed = base64.b64encode(contents).decode("utf-8")
@@ -195,7 +195,6 @@ if context_name == "todo: upload":
 
 
 if context_name == "clinician":
-  st.write("todo")
   with st.expander("Help"):
     st.markdown(f'''
           1. Choose a context in left sidebar
@@ -216,7 +215,6 @@ if context_name == "clinician":
   feature_idx = st.multiselect(
     "Select features to plot",
     [0, 1, 2, 3])
-  # feature_idx = st.selectbox("Column", list(range(out_edges.shape[1])))
 
   fig, ax = plt.subplots()
   ax.plot(out_edges[:,feature_idx])
