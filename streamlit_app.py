@@ -35,20 +35,15 @@ config = Config()
 if context_name == "participant":
 	with st.expander("Help"):
 		st.markdown(f'''
-					1. Choose a context in left sidebar
+					1. Choose a context in left sidebar - participant here would be the mockup interface for a participant having uploaded a video of themselves engaging in PT
 					2. An example demo video is provided
-					3. Select analysis
-					4. Click `Run` to start processing and analysis
-					5. View analysis
+					3. Click `Click to Run Motion Analytics` to start processing and analysis
+					4. View example visualization of keypoint and anomaly detection below
+					5. View in "clinician" context for more detailed analysis
 					''')
 	# st.video("https://www.youtube.com/watch?v=4zgjRBQEkeg&t=5s")
 
-	@st.cache(persist=True)
-	def load_model(url: str):
-		return hub.load(url)
-
-	# module = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
-	module = load_model("https://tfhub.dev/google/movenet/singlepose/lightning/4")
+	module = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
 	input_size = 192
 
 	def movenet(input_image):
@@ -128,6 +123,9 @@ if context_name == "participant":
 		with open('out_edges.pkl', 'wb') as file:
 			pkl.dump(out_edges, file)
 
+		with open('output_images2.pkl', 'wb') as file:
+			pkl.dump(output_images2, file)
+
 		st.markdown(
 				f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
 				unsafe_allow_html=True,
@@ -142,9 +140,8 @@ if context_name == "todo: upload":
 					1. Choose a context in left sidebar
 					2. Input data
 					3. Upload a video (h.264)
-					4. Select analysis
-					5. Click `Run` to start processing and analysis
-					6. View analysis
+					4. Click `Run` to start processing and analysis
+					5. View analysis
 					''')
 	
 	st.title("Upload a video file")
@@ -170,26 +167,30 @@ if context_name == "todo: upload":
 	else:
 			st.write("Enter data above")
 
+
 @st.experimental_memo
 def load_edges():
-		with open('out_keypoints.pkl', 'rb') as file:
-			out_keypoints = pkl.load(file)
-		
-		with open('out_edges.pkl', 'rb') as file:
-			out_edges = pkl.load(file)
-		return out_keypoints, out_edges
+	with open('out_keypoints.pkl', 'rb') as file:
+		out_keypoints = pkl.load(file)
+	with open('out_edges.pkl', 'rb') as file:
+		out_edges = pkl.load(file)
+	with open('output_images2.pkl', 'rb') as file:
+		output_images2 = pkl.load(file)
+	return out_keypoints, out_edges, output_images2
 
 if context_name == "clinician":
 	with st.expander("Help"):
 		st.markdown(f'''
 					1. Choose a context in left sidebar
-					2. Select participant
-					3. Select analysis
-					4. Click `Run` to start processing and analysis
-					5. View analysis¡™¡
+					2. Select frame
+					3. Select keypoints to plot (by default, notable upper and lower extremity keypoints are selected)
+					4. The x-y positions of the selected keypoints will be plotted, and the inferenced image will display in sidebar accordingly
+					5. Move the slider to select a different frame (black line indicates the selected frame on plots). Resize the sidebar as needed.
+					6. Pink highlights are areas of interest where anomalous velocities of motion have been detected by the model. This type of visualization can show clearly that there is more motion activity and potentially more anomalous motion in the upper extremities.
+					7. Clinician can then use this objective data to quickly determine if the participant is performing the motion correctly - data which is typically not accessible.
 					''')
 
-	out_keypoints, out_edges = load_edges()
+	out_keypoints, out_edges, output_images2 = load_edges()
 	mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 	mask_edge = mask_edge.reshape(-1, 36).astype('float32') # numframes, 18 joints x 2 points
 	anom_idx = np.max(mask_edge, axis=1).astype("int")
@@ -198,26 +199,66 @@ if context_name == "clinician":
 	name_combinations = config.get_name_combinations()
 	df_edgenames = pd.DataFrame(name_combinations, columns=["name"])
 
-	feature_query = st.multiselect(
-		"Select features to plot",
-		name_combinations,
-		default=["left_elbow-left_wrist-start_y",
-				"left_elbow-left_wrist-end_y",
-				"right_elbow-right_wrist-start_y",
-				"right_elbow-right_wrist-end_y",
-				"left_knee-left_ankle-start_y",
-		]
+	frame_idx = st.slider(
+		"Select frame (use left and right arrows to scroll through)",
+		0, 40, 0
 	)
-	idx = df_edgenames.index[df_edgenames.name.isin(feature_query)].values
+	st.header("Upper extremities position")
+	feature_query_upper = st.multiselect(
+		"Select keypoints to plot",
+		name_combinations,
+		default=[
+			"left_elbow-left_wrist-start_y",
+			"left_elbow-left_wrist-end_y",
+			"right_elbow-right_wrist-start_y",
+			"right_elbow-right_wrist-end_y",
+			"left_knee-left_ankle-start_y",
+		],
+		key="upper"
+	)
+	idx = df_edgenames.index[df_edgenames.name.isin(feature_query_upper)].values
 
-	fig, ax = plt.subplots()
-	ax.plot(out_edges[:,idx])
-	ax.set_xlabel('Frame')
-	ax.set_ylabel('xy position')
-	ax.legend(feature_query, loc='upper left', bbox_to_anchor=(1, 1))
+	fig_upper, ax_upper = plt.subplots(figsize=(5, 2))
+	ax_upper.plot(out_edges[:,idx])
+	ax_upper.set_xlabel('Frame')
+	ax_upper.set_ylabel('xy position')
+	ax_upper.legend(feature_query_upper, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
 
 	segments = analysisphysics.get_segments(anom_idx)
 	for segi in segments:
-		analysisphysics.plot_patch(ax, segi)
+		analysisphysics.plot_patch(ax_upper, segi)
 
-	st.pyplot(fig)
+	analysisphysics.plot_patchline(ax_upper, frame_idx)
+
+	# todo: compute anomalies on the fly for only displayed plots
+	st.pyplot(fig_upper)
+
+
+	st.header("Lower extremities position")
+	feature_query_lower = st.multiselect(
+		"Select keypoints to plot",
+		name_combinations,
+		default=[
+			"right_knee-right_ankle-start_y",
+			"left_knee-left_ankle-start_y",
+		],
+		key="lower"
+	)
+
+	idx = df_edgenames.index[df_edgenames.name.isin(feature_query_lower)].values
+	fig_lower, ax_lower = plt.subplots(figsize=(5, 2))
+	ax_lower.plot(out_edges[:,idx])
+	ax_lower.set_xlabel('Frame')
+	ax_lower.set_ylabel('xy position')
+	ax_lower.legend(feature_query_lower, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
+
+	# segments = analysisphysics.get_segments(anom_idx)
+	# for segi in segments:
+	# 	analysisphysics.plot_patch(ax_lower, segi)
+
+	analysisphysics.plot_patchline(ax_lower, frame_idx)
+	st.pyplot(fig_lower)
+
+	image = output_images2[frame_idx]
+	with st.sidebar:
+		sidebar_image = st.image(image)

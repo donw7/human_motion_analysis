@@ -39,7 +39,6 @@ def plot_patch(ax, start_stop) -> None:
 		(start_stop[1], 0.),  # right, bottom
 		(0., 0.),  # ignored
 	]
-
 	codes = [
 			Path.MOVETO,
 			Path.LINETO,
@@ -47,9 +46,26 @@ def plot_patch(ax, start_stop) -> None:
 			Path.LINETO,
 			Path.CLOSEPOLY,
 	]
-
 	path = Path(verts, codes)
-
 	patch = patches.PathPatch(path, facecolor='red', lw=0, alpha=0.2)
+	ax.add_patch(patch)
+
+def plot_patchline(ax, idx) -> None:
+	verts = [
+		(idx, 0.),  # left, bottom
+		(idx, 200.),  # left, top
+		(idx, 200.),  # right, top
+		(idx, 0.),  # right, bottom
+		(0., 0.),  # ignored
+	]
+	codes = [
+			Path.MOVETO,
+			Path.LINETO,
+			Path.LINETO,
+			Path.LINETO,
+			Path.CLOSEPOLY,
+	]
+	path = Path(verts, codes)
+	patch = patches.PathPatch(path, facecolor='black', lw=3)
 	ax.add_patch(patch)
 
