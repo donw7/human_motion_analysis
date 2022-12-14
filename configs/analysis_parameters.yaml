@@ -5,3 +5,5 @@ KEYPOINT_THRESH_SCORE_CROP : 0.2    # 0.2 initial
 KEYPOINT_THRESH_SCORE_DRAW : 0.11   # 0.11 initial
 
 EDGE_VEL_THRESH : 10
+
+XY_NAMES : ["start_x","start_y", "end_x", "end_y"]
