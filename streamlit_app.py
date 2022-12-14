@@ -8,6 +8,8 @@ import tensorflow_hub as hub
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.path import Path
+import matplotlib.patches as patches
 import cv2
 import imageio
 import yaml
@@ -18,32 +20,17 @@ import sys
 import importlib
 
 from src.io import iomod
+from src.io.utils import Config
 from src.inference import inference
 from src.visualization import draw
 from src.analysis import analysisphysics
 from src.tests import testdraw, structshape
 
-def load_config(path):
-		with open(path) as file:
-				config = yaml.full_load(file)
-		return config
-
-# set up paths
-CONFIG_KEYPOINTS = load_config(r"configs/keypoints.yaml")
-CONFIG_EDGE_COLORS = load_config(r"configs/edge_colors.yaml")
-PARAMS = load_config(r"configs/analysis_parameters.yaml")
-
-# confidence threshold to determine whether a keypoint prediction is reliable, e.g. for cropping algorithm during inference
-KEYPOINT_THRESH_SCORE_CROP = load_config("configs/analysis_parameters.yaml")["KEYPOINT_THRESH_SCORE_CROP"]
-
-
 st.set_page_config(layout="wide")
-
 st.title("Physiotherapy Analytics Demo")
-
 st.sidebar.header("Context")
 context_name = st.sidebar.selectbox("Choose a context", ["participant", "clinician"])
-
+config = Config()
 
 if context_name == "participant":
 	with st.expander("Help"):
@@ -56,11 +43,14 @@ if context_name == "participant":
 					''')
 	# st.video("https://www.youtube.com/watch?v=4zgjRBQEkeg&t=5s")
 
-	'''load model'''
-	module = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
+	@st.cache(persist=True)
+	def load_model(url: str):
+		return hub.load(url)
+
+	# module = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
+	module = load_model("https://tfhub.dev/google/movenet/singlepose/lightning/4")
 	input_size = 192
 
-	st.experimental_memo()
 	def movenet(input_image):
 		"""Runs detection on an input image.
 
@@ -112,14 +102,14 @@ if context_name == "participant":
 		# Run inference
 		out_keypoints, out_edges = \
 				inference.inference_video(movenet, images, input_size, \
-																	CONFIG_KEYPOINTS, CONFIG_EDGE_COLORS, KEYPOINT_THRESH_SCORE_CROP, PARAMS)
+																	config.kpts, config.edges, config.params["KEYPOINT_THRESH_SCORE_CROP"], config.params)
 
 		# Get mask for labeling edges based on velocity
-		mask_edge = analysisphysics.compute_edge_velocities(out_edges, PARAMS["EDGE_VEL_THRESH"])
+		mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 
 
 		output_images, output_images2 = \
-				draw.wrap_draw_subplots(images, out_keypoints, out_edges, CONFIG_EDGE_COLORS, \
+				draw.wrap_draw_subplots(images, out_keypoints, out_edges, config.edges, \
 																mask_edge=mask_edge, figsize=(10,10))
 
 		# Prepare gif visualization.
@@ -200,13 +190,34 @@ if context_name == "clinician":
 					''')
 
 	out_keypoints, out_edges = load_edges()
+	mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
+	mask_edge = mask_edge.reshape(-1, 36).astype('float32') # numframes, 18 joints x 2 points
+	anom_idx = np.max(mask_edge, axis=1).astype("int")
 
 	out_edges = out_edges.reshape(-1, 72).astype('float32')
+	name_combinations = config.get_name_combinations()
+	df_edgenames = pd.DataFrame(name_combinations, columns=["name"])
 
-	feature_idx = st.multiselect(
+	feature_query = st.multiselect(
 		"Select features to plot",
-		[0, 1, 2, 3])
+		name_combinations,
+		default=["left_elbow-left_wrist-start_y",
+				"left_elbow-left_wrist-end_y",
+				"right_elbow-right_wrist-start_y",
+				"right_elbow-right_wrist-end_y",
+				"left_knee-left_ankle-start_y",
+		]
+	)
+	idx = df_edgenames.index[df_edgenames.name.isin(feature_query)].values
 
 	fig, ax = plt.subplots()
-	ax.plot(out_edges[:,feature_idx])
+	ax.plot(out_edges[:,idx])
+	ax.set_xlabel('Frame')
+	ax.set_ylabel('xy position')
+	ax.legend(feature_query, loc='upper left', bbox_to_anchor=(1, 1))
+
+	segments = analysisphysics.get_segments(anom_idx)
+	for segi in segments:
+		analysisphysics.plot_patch(ax, segi)
+
 	st.pyplot(fig)

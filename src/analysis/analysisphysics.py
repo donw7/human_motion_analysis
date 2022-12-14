@@ -1,4 +1,7 @@
 import numpy as np
+from itertools import groupby
+from matplotlib.path import Path
+import matplotlib.patches as patches
 
 def compute_edge_velocities(out_edges, EDGE_VEL_THRESH):
     # Calculate edge velocities and feed back in as mask (if run inference already)
@@ -18,5 +21,35 @@ def compute_edge_velocities(out_edges, EDGE_VEL_THRESH):
     return mask_edge
 
 
+def get_segments(anom_idx) -> list:
+    segments = []
+    for k, g in groupby(enumerate(anom_idx), lambda x: x[1]):
+        if k == 1:
+            indices = list(map(lambda x: x[0], g))
+            start = indices[0]
+            stop = indices[-1]
+            segments.append((start, stop))
+    return segments
 
+def plot_patch(ax, start_stop) -> None:
+	verts = [
+		(start_stop[0], 0.),  # left, bottom
+		(start_stop[0], 200.),  # left, top
+		(start_stop[1], 200.),  # right, top
+		(start_stop[1], 0.),  # right, bottom
+		(0., 0.),  # ignored
+	]
+
+	codes = [
+			Path.MOVETO,
+			Path.LINETO,
+			Path.LINETO,
+			Path.LINETO,
+			Path.CLOSEPOLY,
+	]
+
+	path = Path(verts, codes)
+
+	patch = patches.PathPatch(path, facecolor='red', lw=0, alpha=0.2)
+	ax.add_patch(patch)
 
