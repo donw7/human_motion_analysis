@@ -231,12 +231,14 @@ def wrap_draw_subplots(images, out_keypoints, out_edges, CONFIG_EDGE_COLORS, mas
       # Draw other representation on right and append to image stack
       output_images2.append(
         _draw_subplot2(images[frame_idx, :, :, :],
-        images_from_plot, keypoints_with_scores, CONFIG_EDGE_COLORS, mask_edge[frame_idx,:,:]))
+        images_from_plot, keypoints_with_scores, CONFIG_EDGE_COLORS, mask_edge[frame_idx,:,:], figsize=figsize)
+		)
 
     else: # Don't feed in mask_edge, default = None
       # Draw other representation on right and append to image stack
       output_images2.append(
       _draw_subplot2(images[frame_idx, :, :, :],
-      images_from_plot, keypoints_with_scores, CONFIG_EDGE_COLORS)) 
+      	images_from_plot, keypoints_with_scores, CONFIG_EDGE_COLORS, figsize=figsize)
+	  )
     
   return output_images, output_images2

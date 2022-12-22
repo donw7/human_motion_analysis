@@ -24,6 +24,7 @@ from src.io import iomod
 from src.io.utils import Config
 from src.inference import inference
 from src.visualization import draw
+importlib.reload(draw)
 from src.analysis import analysisphysics
 from src.tests import testdraw, structshape
 
@@ -46,8 +47,12 @@ if context_name == "participant":
 					''')
 	# st.video("https://www.youtube.com/watch?v=4zgjRBQEkeg&t=5s")
 
-	module = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
+	# module = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
+
 	input_size = 192
+	st.write("loading model")
+	model = tf.saved_model.load(Path("models", "movenet_lightning"))
+	st.write("loaded model")
 
 	def movenet(input_image):
 		"""Runs detection on an input image.
@@ -61,14 +66,10 @@ if context_name == "participant":
 			A [1, 1, 17, 3] float numpy array representing the predicted keypoint
 			coordinates and scores.
 		"""
-		model = module.signatures['serving_default']
-
-		# SavedModel format expects tensor type of int32.
-		input_image = tf.cast(input_image, dtype=tf.int32)
-		# Run model inference.
-		outputs = model(input_image)
-		# Output is a [1, 1, 17, 3] tensor.
-		keypoints_with_scores = outputs['output_0'].numpy()
+		# model = module.signatures['serving_default']
+		input_image = tf.cast(input_image, dtype=tf.int32) # SavedModel format expects tensor type of int32
+		outputs = model.signatures['serving_default'](input_image) # run inference
+		keypoints_with_scores = outputs['output_0'].numpy() # [1, 1, 17, 3] tensor --> np
 		return keypoints_with_scores
 		
 	"""### select demo video in sidebar"""
@@ -97,19 +98,23 @@ if context_name == "participant":
 		imagesgif = tf.io.read_file(fgifpath)
 		images = tf.image.decode_gif(imagesgif)
 
+		st.write(f"decoded gif, inference starting")
 		# Run inference
 		out_keypoints, out_edges = \
 				inference.inference_video(movenet, images, input_size, \
 																	config.kpts, config.edges, config.params["KEYPOINT_THRESH_SCORE_CROP"], config.params)
 
+		st.write("inference done, compute_edge_velocities starting")
 		# Get mask for labeling edges based on velocity
 		mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 
 
+		st.write("compute_edge_velocities done, draw subplots starting")
 		out_images_draw, out_images_drawsubplots = \
 				draw.wrap_draw_subplots(images, out_keypoints, out_edges, config.edges, \
-																mask_edge=mask_edge, figsize=(10,10))
+																mask_edge=mask_edge, figsize=(5,5))
 
+		st.write("draw done, prepare gif visualization starting")
 		# Prepare gif visualization.
 		output2 = np.stack(out_images_drawsubplots, axis=0)
 		iomod.convert_to_gif(output2, fgifpath, fps=10)
@@ -120,6 +125,14 @@ if context_name == "participant":
 		data_url_processed = base64.b64encode(contents).decode("utf-8")
 		file_processed.close()
 
+		# display
+		st.markdown(
+				f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
+				unsafe_allow_html=True,
+		)
+
+		st.write("saving")
+		# save
 		with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
 			pkl.dump(out_keypoints, file)
 		with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
@@ -129,10 +142,10 @@ if context_name == "participant":
 		with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'wb') as file:
 			pkl.dump(out_images_drawsubplots, file)
 
-		st.markdown(
-				f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
-				unsafe_allow_html=True,
-		)
+		st.write("saved")
+
+
+
 	else:
 		pass
 
@@ -206,7 +219,7 @@ if context_name == "clinician":
 
 	frame_idx = st.slider(
 		"Select frame (use left and right arrows to scroll through)",
-		0, 40, 0
+		0, len(out_images_drawsubplots), 0
 	)
 	st.header("Upper extremities position")
 	feature_query_upper = st.multiselect(
