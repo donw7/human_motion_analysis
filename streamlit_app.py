@@ -18,6 +18,7 @@ import glob
 import pickle as pkl
 import sys
 import importlib
+from pathlib import Path
 
 from src.io import iomod
 from src.io.utils import Config
@@ -30,6 +31,8 @@ st.set_page_config(layout="wide")
 st.title("Physiotherapy Analytics Demo")
 st.sidebar.header("Context")
 context_name = st.sidebar.selectbox("Choose a context", ["participant", "clinician"])
+filename = st.sidebar.selectbox("Choose a file", ["dance_demo", "000077_demo"])
+
 config = Config()
 
 if context_name == "participant":
@@ -68,8 +71,8 @@ if context_name == "participant":
 		keypoints_with_scores = outputs['output_0'].numpy()
 		return keypoints_with_scores
 		
-	"""### demo dance video"""
-	file_ = open("dance_input.gif", "rb")
+	"""### select demo video in sidebar"""
+	file_ = open(Path("test_examples", f"{filename}.gif"), "rb")
 	contents = file_.read()
 	data_url = base64.b64encode(contents).decode("utf-8")
 	file_.close()
@@ -81,13 +84,13 @@ if context_name == "participant":
 
 	if st.button("Click to Run Motion Analytics"):
 
-		test_path = 'dance_input.gif'
-		samplevid = iomod.load_video(test_path)
+		path = Path("test_examples", f"{filename}.gif")
+		samplevid = iomod.load_video(str(path))
 
 		st.write("processing")
 
 		# # Make a gif and save
-		fgifpath = f"{test_path}_test_thunder6.gif"
+		fgifpath = str(Path("test_examples", f"{filename}_inference_lightning.gif"))
 		iomod.imageio.mimsave(fgifpath, samplevid)
 
 		# Read & decode from saved file
@@ -103,12 +106,12 @@ if context_name == "participant":
 		mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 
 
-		output_images, output_images2 = \
+		out_images_draw, out_images_drawsubplots = \
 				draw.wrap_draw_subplots(images, out_keypoints, out_edges, config.edges, \
 																mask_edge=mask_edge, figsize=(10,10))
 
 		# Prepare gif visualization.
-		output2 = np.stack(output_images2, axis=0)
+		output2 = np.stack(out_images_drawsubplots, axis=0)
 		iomod.convert_to_gif(output2, fgifpath, fps=10)
 
 		"""### processed - body keypoints detected; anomalous velocities of motion highlighted in red"""
@@ -117,14 +120,14 @@ if context_name == "participant":
 		data_url_processed = base64.b64encode(contents).decode("utf-8")
 		file_processed.close()
 
-		with open('out_keypoints.pkl', 'wb') as file:
+		with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
 			pkl.dump(out_keypoints, file)
-
-		with open('out_edges.pkl', 'wb') as file:
+		with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
 			pkl.dump(out_edges, file)
-
-		with open('output_images2.pkl', 'wb') as file:
-			pkl.dump(output_images2, file)
+		with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), 'wb') as file:
+			pkl.dump(out_images_draw, file)
+		with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'wb') as file:
+			pkl.dump(out_images_drawsubplots, file)
 
 		st.markdown(
 				f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
@@ -169,14 +172,16 @@ if context_name == "todo: upload":
 
 
 @st.experimental_memo
-def load_edges():
-	with open('out_keypoints.pkl', 'rb') as file:
+def load_edges(filename):
+	with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'rb') as file:
 		out_keypoints = pkl.load(file)
-	with open('out_edges.pkl', 'rb') as file:
+	with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'rb') as file:
 		out_edges = pkl.load(file)
-	with open('output_images2.pkl', 'rb') as file:
-		output_images2 = pkl.load(file)
-	return out_keypoints, out_edges, output_images2
+	with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), 'rb') as file:
+		out_images_draw = pkl.load(file)
+	with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'rb') as file:
+		out_images_drawsubplots = pkl.load(file)
+	return out_keypoints, out_edges, out_images_draw, out_images_drawsubplots
 
 if context_name == "clinician":
 	with st.expander("Help"):
@@ -190,7 +195,7 @@ if context_name == "clinician":
 					7. Clinician can then use this objective data to quickly determine if the participant is performing the motion correctly - data which is typically not accessible.
 					''')
 
-	out_keypoints, out_edges, output_images2 = load_edges()
+	out_keypoints, out_edges, out_images_draw, out_images_drawsubplots = load_edges(filename)
 	mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 	mask_edge = mask_edge.reshape(-1, 36).astype('float32') # numframes, 18 joints x 2 points
 	anom_idx = np.max(mask_edge, axis=1).astype("int")
@@ -259,6 +264,6 @@ if context_name == "clinician":
 	analysisphysics.plot_patchline(ax_lower, frame_idx)
 	st.pyplot(fig_lower)
 
-	image = output_images2[frame_idx]
+	image = out_images_drawsubplots[frame_idx]
 	with st.sidebar:
 		sidebar_image = st.image(image)
