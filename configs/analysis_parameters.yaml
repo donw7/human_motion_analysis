@@ -1,5 +1,6 @@
-MODEL_NAME : "movenet_thunder"
+MODEL_NAME : "movenet_lightning"
 #@param ["movenet_lightning", "movenet_thunder", "movenet_lightning_f16.tflite", "movenet_thunder_f16.tflite", "movenet_lightning_int8.tflite", "movenet_thunder_int8.tflite"]
+INPUT_SIZE : 192 # 256 for thunder
 
 KEYPOINT_THRESH_SCORE_CROP : 0.2    # 0.2 initial
 KEYPOINT_THRESH_SCORE_DRAW : 0.11   # 0.11 initial
