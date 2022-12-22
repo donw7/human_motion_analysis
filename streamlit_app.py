@@ -74,6 +74,7 @@ def movenet(input_image):
 	keypoints_with_scores = outputs['output_0'].numpy() # [1, 1, 17, 3] tensor --> np
 	return keypoints_with_scores
 
+
 # page content start
 if context_name == "participant":
 	with st.expander("Help"):
@@ -123,7 +124,7 @@ if context_name == "participant":
 
 		st.write("inference done, compute_edge_velocities starting")
 		# Get mask for labeling edges based on velocity
-		mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
+		_, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 
 		st.write("compute_edge_velocities done, draw subplots starting")
 		out_images_draw, out_images_drawsubplots = draw.wrap_draw_subplots(
@@ -175,7 +176,7 @@ if context_name == "clinician":
 					''')
 
 	out_keypoints, out_edges, out_images_draw, out_images_drawsubplots = load_edges(filename)
-	mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
+	edge_vel, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 	mask_edge = mask_edge.reshape(-1, 36).astype('float32') # numframes, 18 joints x 2 points
 	anom_idx = np.max(mask_edge, axis=1).astype("int")
 
@@ -187,6 +188,7 @@ if context_name == "clinician":
 		"Select frame (use left and right arrows to scroll through)",
 		0, len(out_images_drawsubplots), 0
 	)
+
 	st.subheader("Upper extremities position")
 	feature_query_upper = st.multiselect(
 		"Select keypoints to plot",
@@ -201,22 +203,18 @@ if context_name == "clinician":
 		key="upper"
 	)
 	idx = df_edgenames.index[df_edgenames.name.isin(feature_query_upper)].values
-
-	fig_upper, ax_upper = plt.subplots(figsize=(5, 2))
+	fig_upper, ax_upper = plt.subplots(figsize=(5, 1))
 	ax_upper.plot(out_edges[:,idx])
 	ax_upper.set_xlabel('Frame')
 	ax_upper.set_ylabel('xy position')
 	ax_upper.legend(feature_query_upper, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
-
 	segments = analysisphysics.get_segments(anom_idx)
 	for segi in segments:
 		analysisphysics.plot_patch(ax_upper, segi)
-
 	analysisphysics.plot_patchline(ax_upper, frame_idx)
 
 	# todo: compute anomalies on the fly for only displayed plots
 	st.pyplot(fig_upper)
-
 	st.subheader("Lower extremities position")
 	feature_query_lower = st.multiselect(
 		"Select keypoints to plot",
@@ -227,20 +225,66 @@ if context_name == "clinician":
 		],
 		key="lower"
 	)
-
 	idx = df_edgenames.index[df_edgenames.name.isin(feature_query_lower)].values
-	fig_lower, ax_lower = plt.subplots(figsize=(5, 2))
+	fig_lower, ax_lower = plt.subplots(figsize=(5, 1))
 	ax_lower.plot(out_edges[:,idx])
 	ax_lower.set_xlabel('Frame')
 	ax_lower.set_ylabel('xy position')
 	ax_lower.legend(feature_query_lower, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
 
+	# todo: divide into axis-specific anomaly highlights rather than overall
 	# segments = analysisphysics.get_segments(anom_idx)
 	# for segi in segments:
 	# 	analysisphysics.plot_patch(ax_lower, segi)
 
 	analysisphysics.plot_patchline(ax_lower, frame_idx)
 	st.pyplot(fig_lower)
+
+	# plot Y velocity of edges
+	st.subheader("Y velocity of forearm")
+	feature_query_vel = st.multiselect(
+		"Select keypoints to plot",
+		config.edge_names,
+		default=[
+			"left_elbow-left_wrist",
+ 			"right_elbow-right_wrist",
+		],
+		key="vel_y"
+	)
+	idx = [config.edge_names.index(x) for x in feature_query_vel]
+	fig_vel_y, ax_vel_y = plt.subplots(figsize=(5, 1))
+	ax_vel_y.plot(edge_vel[:,idx,1]) # Y only
+	ax_vel_y.set_xlabel('Frame')
+	ax_vel_y.set_ylabel('Y velocity')
+	ax_vel_y.legend(feature_query_vel, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
+	ax_vel_y.set_ylim([0, 20])
+	for segi in segments:
+		analysisphysics.plot_patch(ax_vel_y, segi)
+	analysisphysics.plot_patchline(ax_vel_y, frame_idx)
+	st.pyplot(fig_vel_y)
+
+	# plot X velocity of edges
+	st.subheader("X velocity of forearm")
+	feature_query_vel = st.multiselect(
+		"Select keypoints to plot",
+		config.edge_names,
+		default=[
+			"left_elbow-left_wrist",
+ 			"right_elbow-right_wrist",
+		],
+		key="vel_x"
+	)
+	idx = [config.edge_names.index(x) for x in feature_query_vel]
+	fig_vel_x, ax_vel_x = plt.subplots(figsize=(5, 1))
+	ax_vel_x.plot(edge_vel[:,idx,0]) # X only
+	ax_vel_x.set_xlabel('Frame')
+	ax_vel_x.set_ylabel('X velocity')
+	ax_vel_x.legend(feature_query_vel, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
+	ax_vel_x.set_ylim([0, 20])
+	for segi in segments:
+		analysisphysics.plot_patch(ax_vel_x, segi)
+	analysisphysics.plot_patchline(ax_vel_x, frame_idx)
+	st.pyplot(fig_vel_x)
 
 	image = out_images_drawsubplots[frame_idx]
 	with st.sidebar:
