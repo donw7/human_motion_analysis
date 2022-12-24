@@ -1,7 +1,10 @@
 import os, sys, yaml
+import pandas as pd
 from pathlib import Path
 from functools import wraps
 from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import List
 from itertools import product
 
 def handle_FileNotFoundError(func):
@@ -41,7 +44,7 @@ class Config:
         return config_file
 
     def get_edge_names(self):
-        '''construct edge names by mapping edge tuples onto keypoint names'''
+        """construct edge names by mapping edge tuples onto keypoint names"""
         if self.kpts and self.edges:
             num_edges = len(self.edges)
             return [
@@ -54,3 +57,9 @@ class Config:
         for e1,e2 in product(self.edge_names, self.params["XY_NAMES"]):
             name_combinations.append(f"{e1}-{e2}")
         return name_combinations
+
+
+
+def convert_listofcls_to_df(listofcls: List[SimpleNamespace]):
+    """convert list of class instances to df with each row as each instance and columns being attributes of class instance"""
+    return pd.DataFrame([cls.__dict__ for cls in listofcls])
