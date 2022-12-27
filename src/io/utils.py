@@ -60,6 +60,6 @@ class Config:
 
 
 
-def convert_listofcls_to_df(listofcls: List[SimpleNamespace]):
+def convert_inst_to_df(inst: List[SimpleNamespace]):
     """convert list of class instances to df with each row as each instance and columns being attributes of class instance"""
-    return pd.DataFrame([cls.__dict__ for cls in listofcls])
+    return pd.DataFrame([cls.__dict__ for cls in inst])
