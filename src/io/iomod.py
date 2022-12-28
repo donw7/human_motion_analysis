@@ -59,26 +59,3 @@ def to_gif(images):
 	return embed.embed_file('./animation.gif')
 '''
 
-def compile_data(paths):
-	'''try and catch FileNotFoundError'''
-	skippedct = 0
-	skippedpaths = []
-	data_all = {}
-	data_all["out_keypoints"] = {}
-	data_all["out_edges"] = {}
-
-	for path in paths:
-		try:
-			with open(f"{path}_out_keypoints.pkl", 'rb') as f:
-				out_keypoints = pkl.load(f)
-			with open(f"{path}_out_edges.pkl", 'rb') as f:
-				out_edges = pkl.load(f)
-			data_all["out_keypoints"][path] = out_keypoints
-			data_all["out_edges"][path] = out_edges
-		except FileNotFoundError:
-			print("FileNotFoundError, Skipping", path)
-			skippedct += 1
-			skippedpaths.append(path)
-	
-	return data_all, skippedct, skippedpaths
-

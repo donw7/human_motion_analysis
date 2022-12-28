@@ -22,6 +22,8 @@ class Video:
 	path: Path = None
 	stem_name: str = None
 	exercise_name: str = None
+	image_width: int = None
+	image_height: int = None
 	metadata: Metadata = None
 
 
