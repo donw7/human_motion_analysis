@@ -33,7 +33,7 @@ st.set_page_config(layout="wide")
 st.title("Physiotherapy Analytics Demo")
 st.sidebar.header("Context")
 context_name = st.sidebar.selectbox("Choose a context", ["participant", "clinician"])
-filename = st.sidebar.selectbox("Choose a file", ["dance_demo", "armraise_000077_demo"])
+filename = st.sidebar.selectbox("Choose a file", ["dance_demo", "armraise_000077_demo", "armraise_000010_demo", "armraise_000045_demo", "curl_000011_demo"])
 
 # set configs
 config = Config()
@@ -100,7 +100,7 @@ if context_name == "participant":
 			unsafe_allow_html=True,
 	)
 
-	if st.button("Click to Run Motion Analytics"):
+	if st.button("Run Motion Analytics"):
 
 		path = Path("test_examples", f"{filename}.gif")
 		samplevid = iomod.load_video(str(path))
@@ -149,6 +149,9 @@ if context_name == "participant":
 				unsafe_allow_html=True,
 		)
 
+		# encode video to mp4
+		iomod.encode_video(out_images_draw, str(Path("test_examples", f"{filename}_out_images_draw.mp4")))
+
 		# save
 		with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
 			pkl.dump(out_keypoints, file)
@@ -171,7 +174,7 @@ if context_name == "clinician":
 					3. Select keypoints to plot (by default, notable upper and lower extremity keypoints are selected)
 					4. The x-y positions of the selected keypoints will be plotted, and the inferenced image will display in sidebar accordingly
 					5. Move the slider to select a different frame (black line indicates the selected frame on plots). Resize the sidebar as needed.
-					6. Pink highlights are areas of interest where anomalous velocities of motion have been detected by the model. This type of visualization can show clearly that there is more motion activity and potentially more anomalous motion in the upper extremities.
+					6. Can then view video from selected areas of interest, such as pink highlights where anomalous velocities of motion have been detected by the model. This type of visualization can show clearly that there is more motion activity and potentially more anomalous motion in the upper extremities.
 					7. Clinician can then use this objective data to quickly determine if the participant is performing the motion correctly - data which is typically not accessible.
 					''')
 
@@ -185,7 +188,7 @@ if context_name == "clinician":
 	df_edgenames = pd.DataFrame(name_combinations, columns=["name"])
 
 	frame_idx = st.sidebar.slider(
-		"Select frame (use left and right arrows to scroll through)",
+		"Select frame (black bar in plots indicates selected frame - scroll to area of interest for start of video)",
 		0, len(out_images_drawsubplots), 0
 	)
 
@@ -286,9 +289,17 @@ if context_name == "clinician":
 	analysisphysics.plot_patchline(ax_vel_x, frame_idx)
 	st.pyplot(fig_vel_x)
 
-	image = out_images_drawsubplots[frame_idx]
+	# image = out_images_drawsubplots[frame_idx]
+
 	with st.sidebar:
-		sidebar_image = st.image(image)
+		# sidebar_image = st.image(image)
+
+		# todo: handle if file does not exist
+		placeholder = st.empty()
+
+		if st.button("Show Video from Selected Frame"):
+			placeholder.video(str(Path("test_examples", f"{filename}_out_images_draw.mp4")), start_time=int(frame_idx/25)) # hardcoded fps conversion for now - todo
+
 
 
 # todo: upload feature

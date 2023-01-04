@@ -54,11 +54,11 @@ def load_video(path, max_frames=0, image_size=(224, 224)):
 
 def encode_video(images, out_path, fps=25, image_size=(224, 224)):
 	"""Encodes a video from a sequence of frames."""
-	images = np.clip(images * 255, 0, 255).astype(np.uint8)
+	images = images.astype(np.uint8)
 	fourcc = cv2.VideoWriter_fourcc(*'H264')
 	writer = cv2.VideoWriter(out_path, fourcc, fps, image_size)
 	for fri in range(images.shape[0]):
-		frame = cv2.cvtColor(images[fri], cv2.COLOR_RGB2BGR)
+		frame = cv2.cvtColor(images[fri], cv2.COLOR_BGR2RGB)
 		writer.write(frame)
 	writer.release()
 

@@ -241,4 +241,4 @@ def wrap_draw_subplots(images, out_keypoints, out_edges, CONFIG_EDGE_COLORS, mas
       	images_from_plot, keypoints_with_scores, CONFIG_EDGE_COLORS, figsize=figsize)
 	  )
     
-  return output_images, output_images2
+  return np.array(output_images), np.array(output_images2)
