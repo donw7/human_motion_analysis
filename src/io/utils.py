@@ -1,11 +1,14 @@
-import os, sys, yaml
-import pandas as pd
+"""Convenience functions for project configuration, converting between main file formats, etc."""
+
+import sys
 from pathlib import Path
+import pandas as pd
 from functools import wraps
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import List
 from itertools import product
+import yaml
 
 def handle_FileNotFoundError(func):
 	@wraps(func)
@@ -17,6 +20,7 @@ def handle_FileNotFoundError(func):
 		except Exception as e:
 			print(f"An unspecified error occurred while loading file {args[1]}: {e}")
 	return wrapper
+
 
 @dataclass
 class Config:
@@ -58,8 +62,11 @@ class Config:
 			name_combinations.append(f"{e1}-{e2}")
 		return name_combinations
 
-
-
 def convert_inst_to_df(inst: List[SimpleNamespace]):
 	"""convert list of class instances to df with each row as each instance and columns being attributes of class instance"""
 	return pd.DataFrame([cls.__dict__ for cls in inst])
+
+
+def write_yaml(data: dict, file_name: str) -> None:
+	with open(file_name, 'w') as f:
+		yaml.dump(data, f, default_flow_style=False, sort_keys=False)

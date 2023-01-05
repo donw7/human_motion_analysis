@@ -1,19 +1,9 @@
+"""Convenience functions for modifying, encoding and decoding videos and related files"""
+
 from tensorflow_docs.vis import embed
-import yaml
 import numpy as np
 import cv2
 import imageio
-import pickle as pkl
-
-
-# write yaml file from dict
-def write_yaml(data, file_name):
-		with open(file_name, 'w') as f:
-				yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-
-'''example usage:
-iomod.write_yaml(KEYPOINT_DICT, 'keypoints.yaml')
-		'''
 
 
 def to_gif(images, fps):
