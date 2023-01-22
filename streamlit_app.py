@@ -10,14 +10,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 import matplotlib.patches as patches
-import cv2
-import imageio
-import yaml
+import cv2 as cv
 import os
 import glob
 import pickle as pkl
 import sys
 import importlib
+import tempfile
 from pathlib import Path
 
 from src.io import iomod
@@ -28,12 +27,13 @@ importlib.reload(draw)
 from src.analysis import analysisphysics
 from src.tests import testdraw, structshape
 
+
 # set up layout
 st.set_page_config(layout="wide")
 st.title("Physiotherapy Analytics Demo")
 st.sidebar.header("Context")
 context_name = st.sidebar.selectbox("Choose a context", ["participant", "clinician"])
-filename = st.sidebar.selectbox("Choose a file", ["dance_demo", "armraise_000077_demo", "armraise_000010_demo", "armraise_000045_demo", "curl_000011_demo"])
+filename = st.sidebar.selectbox("Choose a file", ["upload", "dance_demo", "armraise_000077_demo", "armraise_000010_demo", "armraise_000045_demo", "curl_000011_demo"])
 
 # set configs
 config = Config()
@@ -89,81 +89,166 @@ if context_name == "participant":
 
 	model = load_model(model_name)
 
-	"""### select demo video in sidebar"""
-	file_ = open(Path("test_examples", f"{filename}.gif"), "rb")
-	contents = file_.read()
-	data_url = base64.b64encode(contents).decode("utf-8")
-	file_.close()
+	if filename == "upload":
+		st.write("upload video")
+		file = st.file_uploader("Choose a file")
+		if file is not None:
+			contents = file.getvalue()
+			with tempfile.NamedTemporaryFile(delete=False) as f:
+				f.write(contents)
+				temp_file = f.name
+			cap = cv.VideoCapture(temp_file)
 
-	st.markdown(
-			f'<img src="data:image/gif;base64,{data_url}" alt="demo gif">',
-			unsafe_allow_html=True,
-	)
+			fps = cap.get(cv.CAP_PROP_FPS)
+			frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+			width = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+			height = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
 
-	if st.button("Run Motion Analytics"):
+			images = np.empty((frames, height, width, 3), dtype=np.uint8)
+			for fri in range(frames):
+				ret, frame = cap.read()
+				if ret:
+					image = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+					images[fri] = image
+				else:
+					break
 
-		path = Path("test_examples", f"{filename}.gif")
-		samplevid = iomod.load_video(str(path))
+			cap.release()
+			os.remove(temp_file)
+			images = tf.convert_to_tensor(images)
 
-		st.write("processing")
 
-		# # Make a gif and save
-		fgifpath = str(Path("test_examples", f"{filename}_inference_lightning.gif"))
-		iomod.imageio.mimsave(fgifpath, samplevid)
+		if st.button("Run Motion Analytics"):
+			st.write("processing")
 
-		# Read & decode from saved file
-		imagesgif = tf.io.read_file(fgifpath)
-		images = tf.image.decode_gif(imagesgif)
+			# Run inference
+			out_keypoints, out_edges = inference.inference_video(
+				movenet, images, input_size,
+				config.kpts, config.edges, config.params["KEYPOINT_THRESH_SCORE_CROP"], config.params
+			)
 
-		st.write(f"decoded gif, inference starting")
-		# Run inference
-		out_keypoints, out_edges = inference.inference_video(
-			movenet, images, input_size,
-			config.kpts, config.edges, config.params["KEYPOINT_THRESH_SCORE_CROP"], config.params
-		)
+			st.write("inference done, compute_edge_velocities starting")
+			# Get mask for labeling edges based on velocity
+			_, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 
-		st.write("inference done, compute_edge_velocities starting")
-		# Get mask for labeling edges based on velocity
-		_, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
+			st.write("compute_edge_velocities done, draw subplots starting")
+			out_images_draw, out_images_drawsubplots = draw.wrap_draw_subplots(
+				images, out_keypoints, out_edges, config.edges,
+				mask_edge=mask_edge, figsize=(5,5)
+			)
 
-		st.write("compute_edge_velocities done, draw subplots starting")
-		out_images_draw, out_images_drawsubplots = draw.wrap_draw_subplots(
-			images, out_keypoints, out_edges, config.edges,
-			mask_edge=mask_edge, figsize=(5,5)
-		)
+			st.write("draw done, prepare gif visualization starting")
+			# Prepare gif visualization.
+			output2 = np.stack(out_images_drawsubplots, axis=0)
+			fgifpath = Path("test_examples", f"{filename}_out.gif")
+			iomod.convert_to_gif(output2, fgifpath, fps=10)
 
-		st.write("draw done, prepare gif visualization starting")
-		# Prepare gif visualization.
-		output2 = np.stack(out_images_drawsubplots, axis=0)
-		iomod.convert_to_gif(output2, fgifpath, fps=10)
+			"""### processed - body keypoints detected; anomalous velocities of motion highlighted in red (if any)"""
+			file_processed = open(fgifpath, "rb")
+			contents = file_processed.read()
+			data_url_processed = base64.b64encode(contents).decode("utf-8")
+			file_processed.close()
 
-		"""### processed - body keypoints detected; anomalous velocities of motion highlighted in red (if any)"""
-		file_processed = open(fgifpath, "rb")
-		contents = file_processed.read()
-		data_url_processed = base64.b64encode(contents).decode("utf-8")
-		file_processed.close()
+			# display
+			st.markdown(
+					f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
+					unsafe_allow_html=True,
+			)
 
-		# display
+			# encode video to mp4
+			iomod.encode_video(out_images_draw, str(Path("test_examples", f"{filename}_out_images_draw.mp4")))
+
+			# save
+			with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
+				pkl.dump(out_keypoints, file)
+			with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
+				pkl.dump(out_edges, file)
+			with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), 'wb') as file:
+				pkl.dump(out_images_draw, file)
+			with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'wb') as file:
+				pkl.dump(out_images_drawsubplots, file)
+
+		else:
+			pass
+
+	else:
+		"""### select or upload video in sidebar"""
+		file_ = open(Path("test_examples", f"{filename}.gif"), "rb").read()
+		contents = file_.read()
+		# contents = file_.read()
+		data_url = base64.b64encode(contents).decode("utf-8")
+		file_.close()
+
 		st.markdown(
-				f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
+				f'<img src="data:image/gif;base64,{data_url}" alt="demo gif">',
 				unsafe_allow_html=True,
 		)
 
-		# encode video to mp4
-		iomod.encode_video(out_images_draw, str(Path("test_examples", f"{filename}_out_images_draw.mp4")))
 
-		# save
-		with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
-			pkl.dump(out_keypoints, file)
-		with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
-			pkl.dump(out_edges, file)
-		with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), 'wb') as file:
-			pkl.dump(out_images_draw, file)
-		with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'wb') as file:
-			pkl.dump(out_images_drawsubplots, file)
+		if st.button("Run Motion Analytics"):
 
-	else:
-		pass
+			path = Path("test_examples", f"{filename}.gif")
+			samplevid = iomod.load_video(str(path))
+
+			st.write("processing")
+
+			# # Make a gif and save
+			fgifpath = str(Path("test_examples", f"{filename}_inference_lightning.gif"))
+			iomod.imageio.mimsave(fgifpath, samplevid)
+
+			# Read & decode from saved file
+			imagesgif = tf.io.read_file(fgifpath)
+			images = tf.image.decode_gif(imagesgif)
+
+			st.write(f"decoded gif, inference starting")
+			# Run inference
+			out_keypoints, out_edges = inference.inference_video(
+				movenet, images, input_size,
+				config.kpts, config.edges, config.params["KEYPOINT_THRESH_SCORE_CROP"], config.params
+			)
+
+			st.write("inference done, compute_edge_velocities starting")
+			# Get mask for labeling edges based on velocity
+			_, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
+
+			st.write("compute_edge_velocities done, draw subplots starting")
+			out_images_draw, out_images_drawsubplots = draw.wrap_draw_subplots(
+				images, out_keypoints, out_edges, config.edges,
+				mask_edge=mask_edge, figsize=(5,5)
+			)
+
+			st.write("draw done, prepare gif visualization starting")
+			# Prepare gif visualization.
+			output2 = np.stack(out_images_drawsubplots, axis=0)
+			iomod.convert_to_gif(output2, fgifpath, fps=10)
+
+			"""### processed - body keypoints detected; anomalous velocities of motion highlighted in red (if any)"""
+			file_processed = open(fgifpath, "rb")
+			contents = file_processed.read()
+			data_url_processed = base64.b64encode(contents).decode("utf-8")
+			file_processed.close()
+
+			# display
+			st.markdown(
+					f'<img src="data:image/gif;base64,{data_url_processed}" alt="demo gif processed">',
+					unsafe_allow_html=True,
+			)
+
+			# encode video to mp4
+			iomod.encode_video(out_images_draw, str(Path("test_examples", f"{filename}_out_images_draw.mp4")))
+
+			# save
+			with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
+				pkl.dump(out_keypoints, file)
+			with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
+				pkl.dump(out_edges, file)
+			with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), 'wb') as file:
+				pkl.dump(out_images_draw, file)
+			with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'wb') as file:
+				pkl.dump(out_images_drawsubplots, file)
+
+		else:
+			pass
 
 
 if context_name == "clinician":
@@ -289,11 +374,7 @@ if context_name == "clinician":
 	analysisphysics.plot_patchline(ax_vel_x, frame_idx)
 	st.pyplot(fig_vel_x)
 
-	# image = out_images_drawsubplots[frame_idx]
-
 	with st.sidebar:
-		# sidebar_image = st.image(image)
-
 		# todo: handle if file does not exist
 		placeholder = st.empty()
 
@@ -301,8 +382,7 @@ if context_name == "clinician":
 			placeholder.video(str(Path("test_examples", f"{filename}_out_images_draw.mp4")), start_time=int(frame_idx/25)) # hardcoded fps conversion for now - todo
 
 
-
-# todo: upload feature
+# todo: upload feature characteristics
 if context_name == "todo: upload":
 	with st.expander("Help"):
 		st.markdown(f'''

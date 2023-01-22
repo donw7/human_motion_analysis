@@ -2,7 +2,7 @@
 
 from tensorflow_docs.vis import embed
 import numpy as np
-import cv2
+import cv2 as cv
 import imageio
 
 
@@ -24,7 +24,7 @@ def crop_center_square(frame):
 	return frame[start_y:start_y+min_dim,start_x:start_x+min_dim]
 
 def load_video(path, max_frames=0, image_size=(224, 224)):
-	cap = cv2.VideoCapture(path)
+	cap = cv.VideoCapture(path)
 	frames = []
 	try:
 		while True:
@@ -32,7 +32,7 @@ def load_video(path, max_frames=0, image_size=(224, 224)):
 			if not ret:
 				break
 			frame = crop_center_square(frame)
-			frame = cv2.resize(frame, image_size)
+			frame = cv.resize(frame, image_size)
 			frame = frame[:, :, [2, 1, 0]]
 			frames.append(frame)
 
@@ -45,10 +45,10 @@ def load_video(path, max_frames=0, image_size=(224, 224)):
 def encode_video(images, out_path, fps=25, image_size=(224, 224)):
 	"""Encodes a video from a sequence of frames."""
 	images = images.astype(np.uint8)
-	fourcc = cv2.VideoWriter_fourcc(*'H264')
-	writer = cv2.VideoWriter(out_path, fourcc, fps, image_size)
+	fourcc = cv.VideoWriter_fourcc(*'H264')
+	writer = cv.VideoWriter(out_path, fourcc, fps, image_size)
 	for fri in range(images.shape[0]):
-		frame = cv2.cvtColor(images[fri], cv2.COLOR_BGR2RGB)
+		frame = cv.cvtColor(images[fri], cv.COLOR_BGR2RGB)
 		writer.write(frame)
 	writer.release()
 
