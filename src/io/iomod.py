@@ -40,22 +40,14 @@ def load_video(path, max_frames=0, image_size=(224, 224)):
 				break
 	finally:
 		cap.release()
-	return np.array(frames)# / 255.0
+	return np.array(frames)
 
 def encode_video(images, out_path, fps=25, image_size=(224, 224)):
-	"""Encodes a video from a sequence of frames."""
-	images = images.astype(np.uint8)
-	fourcc = cv.VideoWriter_fourcc(*'H264')
-	writer = cv.VideoWriter(out_path, fourcc, fps, image_size)
-	for fri in range(images.shape[0]):
-		frame = cv.cvtColor(images[fri], cv.COLOR_BGR2RGB)
-		writer.write(frame)
-	writer.release()
-
-'''another example (used in 3D action net?)
-def to_gif(images):
-	converted_images = np.clip(images * 255, 0, 255).astype(np.uint8)
-	imageio.mimsave('./animation.gif', converted_images, fps=25)
-	return embed.embed_file('./animation.gif')
-'''
+    """Encodes a video from a sequence of frames."""
+    images = images.astype(np.uint8)
+    writer = imageio.get_writer(out_path, fps=fps)
+    for fri in range(images.shape[0]):
+        frame = images[fri]
+        writer.append_data(frame)
+    writer.close()
 

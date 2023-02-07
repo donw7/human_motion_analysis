@@ -107,7 +107,7 @@ def inference_analyze_pipe(images: np.array, filename: str, config=config) -> No
 
 	# encode video to mp4 and save all outputs
 	video_draw_path = str(Path("test_examples", f"{filename}_out_images_draw.mp4"))
-	iomod.encode_video(out_images_draw, video_draw_path)
+	iomod.encode_video(out_images_draw, video_draw_path, image_size=out_images_draw[0].shape[:2])
 	with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
 		pkl.dump(out_keypoints, file)
 	with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
