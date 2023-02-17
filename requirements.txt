@@ -19,6 +19,7 @@ google-pasta==0.2.0
 grpcio==1.51.1
 h5py==3.7.0
 imageio==2.22.4
+ipython==8.10.0
 joblib==1.2.0
 keras==2.9.0
 Keras-Preprocessing==1.1.2
@@ -65,3 +66,4 @@ validators==0.20.0
 watchdog==2.1.9
 Werkzeug==2.2.2
 wget==3.2
+git+https://github.com/tensorflow/docs
