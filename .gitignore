@@ -1,0 +1,8 @@
+**/__pycache__/
+/data/
+/models/
+*.swp
+**/*.pyc
+**/*.mp4
+**/*.pkl
+**/*.DS_Store
