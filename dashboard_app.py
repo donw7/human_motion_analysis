@@ -27,6 +27,7 @@ importlib.reload(draw)
 from src.analysis import analysisphysics
 from src.tests import testdraw, structshape
 
+from src.models.TripletSiam import load_TS_weights, TS_inference
 
 # set up layout
 st.set_page_config(layout="wide")
@@ -48,15 +49,23 @@ def load_model(model_name):
 
 @st.experimental_memo
 def load_edges(filename):
-	with open(str(Path("test_examples", f"{filename}_out_keypoints.pkl")), 'rb') as file:
+	with open(str(Path("test_examples", f"{filename}_out_keypoints.pkl")), "rb") as file:
 		out_keypoints = pkl.load(file)
-	with open(str(Path("test_examples", f"{filename}_out_edges.pkl")), 'rb') as file:
+	with open(str(Path("test_examples", f"{filename}_out_edges.pkl")), "rb") as file:
 		out_edges = pkl.load(file)
-	with open(str(Path("test_examples", f"{filename}_out_images_draw.pkl")), 'rb') as file:
+	with open(str(Path("test_examples", f"{filename}_out_images_draw.pkl")), "rb") as file:
 		out_images_draw = pkl.load(file)
-	with open(str(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl")), 'rb') as file:
+	with open(str(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl")), "rb") as file:
 		out_images_drawsubplots = pkl.load(file)
 	return out_keypoints, out_edges, out_images_draw, out_images_drawsubplots
+
+@st.experimental_memo
+def load_labels(filename):
+	with open(str(Path("test_examples", f"{filename}_video_labels.pkl")), "rb") as file:
+		video_labels = pkl.load(file)
+	with open(str(Path("test_examples", f"{filename}_video_nn_preds.pkl")), "rb") as file:
+		video_nn_preds = pkl.load(file)
+	return video_labels, video_nn_preds
 
 def movenet(input_image):
 	"""Runs detection on an input image.
@@ -68,11 +77,12 @@ def movenet(input_image):
 		A [1, 1, 17, 3] float numpy array representing the predicted keypoint
 		coordinates and scores.
 	"""
-	# model = module.signatures['serving_default']
+	# model = module.signatures["serving_default"]
 	input_image = tf.cast(input_image, dtype=tf.int32) # SavedModel format expects tensor type of int32
-	outputs = model.signatures['serving_default'](input_image) # run inference
-	keypoints_with_scores = outputs['output_0'].numpy() # [1, 1, 17, 3] tensor --> np
+	outputs = model.signatures["serving_default"](input_image) # run inference
+	keypoints_with_scores = outputs["output_0"].numpy() # [1, 1, 17, 3] tensor --> np
 	return keypoints_with_scores
+
 
 def inference_analyze_pipe(images: np.array, filename: str, config=config) -> None:
 	st.write(f"decoded video, inference starting")
@@ -84,7 +94,11 @@ def inference_analyze_pipe(images: np.array, filename: str, config=config) -> No
 	st.write("inference done, compute_edge_velocities starting") # --> mask for labeling anomalous edges
 	_, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
 
-	st.write("compute_edge_velocities done, draw subplots starting")
+	st.write("compute_edge_velocities done, form error detection model starting")
+	predictions = TS_inference(images)
+	mask_edge = draw.update_mask(mask_edge, predictions)
+
+	st.write("form error detection model, draw subplots starting")
 	out_images_draw, out_images_drawsubplots = draw.wrap_draw_subplots(
 		images, out_keypoints, out_edges, config.edges,
 		mask_edge=mask_edge, figsize=(5,5)
@@ -95,7 +109,7 @@ def inference_analyze_pipe(images: np.array, filename: str, config=config) -> No
 	fgifpath = str(Path("test_examples", f"{filename}_inference_lightning.gif"))
 	iomod.convert_to_gif(output2, fgifpath, fps=10)
 
-	"""### processed - body keypoints detected; anomalous velocities of motion highlighted in red (if any)"""
+	"""### processed - body keypoints detected; anomalous motion highlighted in red (if any)"""
 	file_processed = open(fgifpath, "rb")
 	contents = file_processed.read()
 	data_url_processed = base64.b64encode(contents).decode("utf-8")
@@ -108,26 +122,50 @@ def inference_analyze_pipe(images: np.array, filename: str, config=config) -> No
 	# encode video to mp4 and save all outputs
 	video_draw_path = str(Path("test_examples", f"{filename}_out_images_draw.mp4"))
 	iomod.encode_video(out_images_draw, video_draw_path, image_size=out_images_draw[0].shape[:2])
-	with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), 'wb') as file:
+	with open(Path("test_examples", f"{filename}_out_keypoints.pkl"), "wb") as file:
 		pkl.dump(out_keypoints, file)
-	with open(Path("test_examples", f"{filename}_out_edges.pkl"), 'wb') as file:
+	with open(Path("test_examples", f"{filename}_out_edges.pkl"), "wb") as file:
 		pkl.dump(out_edges, file)
-	with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), 'wb') as file:
+	with open(Path("test_examples", f"{filename}_out_images_draw.pkl"), "wb") as file:
 		pkl.dump(out_images_draw, file)
-	with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), 'wb') as file:
+	with open(Path("test_examples", f"{filename}_out_images_drawsubplots.pkl"), "wb") as file:
 		pkl.dump(out_images_drawsubplots, file)
+
+class RasterPlot:
+	def __init__(self, labels, predictions):
+		self.labels = labels
+		self.predictions = predictions
+
+	def plot(self):
+		patches_labels = [plt.Rectangle((i, 0), 1, 1, color="black", alpha=0.5) for i, l in enumerate(self.labels) if l]
+		patches_labels += [plt.Rectangle((i, 0), 1, 1, color="blue", alpha=0.5) for i, l in enumerate(self.predictions) if l]
+		fig, ax = plt.subplots(figsize=(20, 1))
+		for patch in patches_labels:
+			ax.add_patch(patch)
+		ax.set_xlim([0, len(self.labels)])
+		ax.set_ylim([0, 1])
+		ax.spines["left"].set_visible(False)
+		ax.set_yticklabels([])
+		ax.set_xlabel("Frame", fontsize=20)
+		ax.set_title("Predictions of Squat Error Frames", fontsize=20)
+		ax.tick_params(axis="x", labelsize=16)
+		legend_patches = [plt.Rectangle((0, 0), 1, 1, color="black", alpha=0.5), plt.Rectangle((0, 0), 1, 1, color="blue", alpha=0.5)]
+		legend_labels = ["Truth", "Predictions"]
+		ax.legend(handles=legend_patches, labels=legend_labels, loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=16)
+		return fig, ax
+
 
 
 # page content start
 if context_name == "participant":
 	with st.expander("Help"):
-		st.markdown(f'''
+		st.markdown(f"""
 					1. Choose a context in left sidebar - participant here would be the mockup interface for a participant having uploaded a video of themselves engaging in PT
 					2. An example demo video is provided
 					3. Click `Click to Run Motion Analytics` to start processing and analysis
 					4. View example visualization of keypoint and anomaly detection below
 					5. View in "clinician" context for more detailed analysis
-					''')
+					""")
 	# st.video("https://www.youtube.com/watch?v=4zgjRBQEkeg&t=5s")
 
 	model = load_model(model_name)
@@ -157,7 +195,6 @@ if context_name == "participant":
 
 			cap.release()
 			os.remove(temp_file)
-			images = tf.convert_to_tensor(images)
 
 			if st.button("Run Motion Analytics"):
 				st.write("processing")
@@ -183,7 +220,7 @@ if context_name == "participant":
 
 if context_name == "clinician":
 	with st.expander("Help"):
-		st.markdown(f'''
+		st.markdown(f"""
 					1. Choose a context in left sidebar
 					2. Select frame
 					3. Select keypoints to plot (by default, notable upper and lower extremity keypoints are selected)
@@ -191,14 +228,14 @@ if context_name == "clinician":
 					5. Move the slider to select a different frame (black line indicates the selected frame on plots). Resize the sidebar as needed.
 					6. Can then view video from selected areas of interest, such as pink highlights where anomalous velocities of motion have been detected by the model. This type of visualization can show clearly that there is more motion activity and potentially more anomalous motion in the upper extremities.
 					7. Clinician can then use this objective data to quickly determine if the participant is performing the motion correctly - data which is typically not accessible.
-					''')
+					""")
 
 	out_keypoints, out_edges, out_images_draw, out_images_drawsubplots = load_edges(filename)
 	edge_vel, mask_edge = analysisphysics.compute_edge_velocities(out_edges, config.params["EDGE_VEL_THRESH"])
-	mask_edge = mask_edge.reshape(-1, 36).astype('float32') # numframes, 18 joints x 2 points
+	mask_edge = mask_edge.reshape(-1, 36).astype("float32") # numframes, 18 joints x 2 points
 	anom_idx = np.max(mask_edge, axis=1).astype("int")
 
-	out_edges = out_edges.reshape(-1, 72).astype('float32')
+	out_edges = out_edges.reshape(-1, 72).astype("float32")
 	name_combinations = config.get_name_combinations()
 	df_edgenames = pd.DataFrame(name_combinations, columns=["name"])
 
@@ -223,9 +260,9 @@ if context_name == "clinician":
 	idx = df_edgenames.index[df_edgenames.name.isin(feature_query_upper)].values
 	fig_upper, ax_upper = plt.subplots(figsize=(5, 1))
 	ax_upper.plot(out_edges[:,idx])
-	ax_upper.set_xlabel('Frame')
-	ax_upper.set_ylabel('xy position')
-	ax_upper.legend(feature_query_upper, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
+	ax_upper.set_xlabel("Frame")
+	ax_upper.set_ylabel("xy position")
+	ax_upper.legend(feature_query_upper, loc="upper left", bbox_to_anchor=(1, 1), fontsize="x-small")
 	segments = analysisphysics.get_segments(anom_idx)
 	for segi in segments:
 		analysisphysics.plot_patch(ax_upper, segi)
@@ -246,9 +283,9 @@ if context_name == "clinician":
 	idx = df_edgenames.index[df_edgenames.name.isin(feature_query_lower)].values
 	fig_lower, ax_lower = plt.subplots(figsize=(5, 1))
 	ax_lower.plot(out_edges[:,idx])
-	ax_lower.set_xlabel('Frame')
-	ax_lower.set_ylabel('xy position')
-	ax_lower.legend(feature_query_lower, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
+	ax_lower.set_xlabel("Frame")
+	ax_lower.set_ylabel("xy position")
+	ax_lower.legend(feature_query_lower, loc="upper left", bbox_to_anchor=(1, 1), fontsize="x-small")
 
 	# todo: divide into axis-specific anomaly highlights rather than overall
 	# segments = analysisphysics.get_segments(anom_idx)
@@ -272,10 +309,10 @@ if context_name == "clinician":
 	idx = [config.edge_names.index(x) for x in feature_query_vel]
 	fig_vel_y, ax_vel_y = plt.subplots(figsize=(5, 1))
 	ax_vel_y.plot(edge_vel[:,idx,1]) # Y only
-	ax_vel_y.set_xlabel('Frame')
-	ax_vel_y.set_ylabel('Y velocity')
-	ax_vel_y.legend(feature_query_vel, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
-	ax_vel_y.set_ylim([0, 20])
+	ax_vel_y.set_xlabel("Frame")
+	ax_vel_y.set_ylabel("Y velocity")
+	ax_vel_y.legend(feature_query_vel, loc="upper left", bbox_to_anchor=(1, 1), fontsize="x-small")
+	ax_vel_y.set_ylim([0, 10])
 	for segi in segments:
 		analysisphysics.plot_patch(ax_vel_y, segi)
 	analysisphysics.plot_patchline(ax_vel_y, frame_idx)
@@ -295,14 +332,20 @@ if context_name == "clinician":
 	idx = [config.edge_names.index(x) for x in feature_query_vel]
 	fig_vel_x, ax_vel_x = plt.subplots(figsize=(5, 1))
 	ax_vel_x.plot(edge_vel[:,idx,0]) # X only
-	ax_vel_x.set_xlabel('Frame')
-	ax_vel_x.set_ylabel('X velocity')
-	ax_vel_x.legend(feature_query_vel, loc='upper left', bbox_to_anchor=(1, 1), fontsize='x-small')
-	ax_vel_x.set_ylim([0, 20])
+	ax_vel_x.set_xlabel("Frame")
+	ax_vel_x.set_ylabel("X velocity")
+	ax_vel_x.legend(feature_query_vel, loc="upper left", bbox_to_anchor=(1, 1), fontsize="x-small")
+	ax_vel_x.set_ylim([0, 10])
 	for segi in segments:
 		analysisphysics.plot_patch(ax_vel_x, segi)
 	analysisphysics.plot_patchline(ax_vel_x, frame_idx)
 	st.pyplot(fig_vel_x)
+
+	# plot raster if available
+	if st.button("Plot Raster"):
+		video_labels, video_nn_preds = load_labels(filename)
+		fig_rp, ax_rp = RasterPlot(video_labels, video_nn_preds).plot()
+		st.pyplot(fig_rp)
 
 	with st.sidebar:
 		# todo: handle if file does not exist
@@ -315,13 +358,13 @@ if context_name == "clinician":
 # todo: upload feature characteristics
 if context_name == "todo: upload":
 	with st.expander("Help"):
-		st.markdown(f'''
+		st.markdown(f"""
 					1. Choose a context in left sidebar
 					2. Input data
 					3. Upload a video (h.264)
 					4. Click `Run` to start processing and analysis
 					5. View analysis
-					''')
+					""")
 	
 	st.title("Upload a video file")
 	video_file = st.file_uploader("h.264")
@@ -330,18 +373,18 @@ if context_name == "todo: upload":
 
 	st.title("Enter data")
 
-	with st.form('my_form'):
+	with st.form("my_form"):
 			participant_name = st.text_input("Name", "Jane Doe")
 			exercise_type = st.selectbox("Exercise Type", ["Arm raise", "Arm curl"])
 
 			# Every form must have a submit button
-			submitted = st.form_submit_button('Submit')
+			submitted = st.form_submit_button("Submit")
 
 	if submitted:
-			st.markdown(f'''
+			st.markdown(f"""
 					You have entered:
 					- Participant Name: {participant_name}
 					- Exercise Type: {exercise_type}
-					''')
+					""")
 	else:
 			st.write("Enter data above")
