@@ -1,0 +1,14 @@
+**.zip
+**.mp4
+**.gif
+**.pkl
+**.pyc
+**.h5
+**.index
+**.dll
+**.bz2
+**/__pycache__/**
+/data
+/models
+/test_examples
+/variables
